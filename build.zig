@@ -34,9 +34,6 @@ pub fn build(b: *std.Build) void {
         const install_sdl2_step = prebuilt_sdl2.install(b, target.result, .bin, .{ .ttf = true, .image = true });
         if (install_sdl2_step) |s| b.getInstallStep().dependOn(s);
 
-        const install_sdl3_step = prebuilt_sdl3.install(b, target.result, .bin, .{});
-        if (install_sdl3_step) |s| b.getInstallStep().dependOn(s);
-
         { // Test SDL2 bindings
             const zsdl2_tests = addTests(test_step, target, optimize, "zsdl2-tests", "src/sdl2.zig", install_sdl2_step);
             link_SDL2_libs_testing(zsdl2_tests);
@@ -71,11 +68,16 @@ pub fn build(b: *std.Build) void {
             prebuilt_sdl2.addLibraryPathsTo(zsdl2_image_tests);
         }
         { // Test SDL3 bindings
-            const zsdl3_tests = addTests(test_step, target, optimize, "zsdl3-tests", "src/sdl3.zig", install_sdl3_step);
-            link_SDL3_libs_testing(zsdl3_tests);
-            prebuilt_sdl3.addLibraryPathsTo(zsdl3_tests);
+            const zsdl3_tests = addTests(test_step, target, optimize, "zsdl3-tests", "src/sdl3.zig", null);
+            // SDL3 is built from source and linked statically, so the tests
+            // need no runtime library installed next to the executable.
+            if (b.lazyDependency("sdl", .{
+                .target = target,
+                .optimize = optimize,
+            })) |sdl_dep| {
+                zsdl3_tests.root_module.linkLibrary(sdl_dep.artifact("SDL3"));
+            }
         }
-
     }
 }
 
@@ -97,23 +99,6 @@ fn link_SDL2_libs_testing(compile_step: *std.Build.Step.Compile) void {
             compile_step.root_module.linkFramework("SDL2", .{});
             compile_step.root_module.linkFramework("SDL2_ttf", .{});
             compile_step.root_module.linkFramework("SDL2_image", .{});
-            compile_step.root_module.addRPathSpecial("@executable_path");
-        },
-        else => {},
-    }
-}
-
-fn link_SDL3_libs_testing(compile_step: *std.Build.Step.Compile) void {
-    switch (compile_step.rootModuleTarget().os.tag) {
-        .windows => {
-            compile_step.root_module.linkSystemLibrary("SDL3", .{});
-        },
-        .linux => {
-            compile_step.root_module.linkSystemLibrary("SDL3", .{});
-            compile_step.root_module.addRPathSpecial("$ORIGIN");
-        },
-        .macos => {
-            compile_step.root_module.linkFramework("SDL3", .{});
             compile_step.root_module.addRPathSpecial("@executable_path");
         },
         else => {},
@@ -285,89 +270,6 @@ pub const prebuilt_sdl2 = struct {
         }
 
         return install_step;
-    }
-};
-
-/// Deprecated. We're going to build SDL from source instead. Rebuilt repo's will be archived.
-pub const prebuilt_sdl3 = struct {
-    pub fn addLibraryPathsTo(compile_step: *std.Build.Step.Compile) void {
-        const b = compile_step.step.owner;
-        const target = compile_step.rootModuleTarget();
-        switch (target.os.tag) {
-            .windows => {
-                if (target.cpu.arch.isX86()) {
-                    if (b.lazyDependency("sdl3_prebuilt_x86_64_windows_gnu", .{})) |sdl3_prebuilt| {
-                        compile_step.root_module.addLibraryPath(sdl3_prebuilt.path("bin"));
-                    }
-                }
-            },
-            .linux => {
-                if (target.cpu.arch.isX86()) {
-                    if (b.lazyDependency("sdl3_prebuilt_x86_64_linux_gnu", .{})) |sdl3_prebuilt| {
-                        compile_step.root_module.addLibraryPath(sdl3_prebuilt.path("lib"));
-                    }
-                }
-            },
-            .macos => {
-                if (b.lazyDependency("sdl3_prebuilt_macos", .{})) |sdl3_prebuilt| {
-                    compile_step.root_module.addFrameworkPath(sdl3_prebuilt.path("Frameworks"));
-                }
-            },
-            else => {},
-        }
-    }
-
-    pub fn install(
-        b: *std.Build,
-        target: std.Target,
-        install_dir: std.Build.InstallDir,
-        aux_libs: packed struct {
-            // TODO
-        },
-    ) ?*std.Build.Step {
-        _ = aux_libs;
-        switch (target.os.tag) {
-            .windows => {
-                if (target.cpu.arch.isX86()) {
-                    if (b.lazyDependency("sdl3_prebuilt_x86_64_windows_gnu", .{})) |sdl3_prebuilt| {
-                        return &b.addInstallFileWithDir(
-                            sdl3_prebuilt.path("bin/SDL3.dll"),
-                            install_dir,
-                            "SDL3.dll",
-                        ).step;
-                    }
-                }
-            },
-            .linux => {
-                if (target.cpu.arch.isX86()) {
-                    if (b.lazyDependency("sdl3_prebuilt_x86_64_linux_gnu", .{})) |sdl3_prebuilt| {
-                        var sdl3_install_step = b.step("install-sdl3-linux", "");
-                        sdl3_install_step.dependOn(&b.addInstallFileWithDir(
-                            sdl3_prebuilt.path("lib/libSDL3.so"),
-                            install_dir,
-                            "libSDL3.so",
-                        ).step);
-                        sdl3_install_step.dependOn(&b.addInstallFileWithDir(
-                            sdl3_prebuilt.path("lib/libSDL3.so"),
-                            install_dir,
-                            "libSDL3.so.0",
-                        ).step);
-                        return sdl3_install_step;
-                    }
-                }
-            },
-            .macos => {
-                if (b.lazyDependency("sdl3_prebuilt_macos", .{})) |sdl3_prebuilt| {
-                    return &b.addInstallDirectory(.{
-                        .source_dir = sdl3_prebuilt.path("Frameworks/SDL3.framework"),
-                        .install_dir = install_dir,
-                        .install_subdir = "SDL3.framework",
-                    }).step;
-                }
-            },
-            else => {},
-        }
-        return null;
     }
 };
 

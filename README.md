@@ -104,4 +104,35 @@ pub fn main() !void {
 ```
 
 ## Getting started (SDL3)
-TODO: Document SDL3 bindings usage
+
+SDL3 is built from source with the Zig build system (via
+[castholm/SDL](https://github.com/castholm/SDL)) and linked statically, so no
+prebuilt or system-installed SDL3 is required. Requires Zig 0.16.0 or newer.
+
+Add the dependencies to your project:
+
+```sh
+zig fetch --save=zsdl git+https://github.com/zig-gamedev/zsdl.git
+zig fetch --save=sdl git+https://github.com/castholm/SDL.git
+```
+
+Example `build.zig`:
+
+```zig
+pub fn build(b: *std.Build) !void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const exe = b.addExecutable(.{ ... });
+
+    const zsdl = b.dependency("zsdl", .{});
+    exe.root_module.addImport("zsdl3", zsdl.module("zsdl3"));
+
+    // Build SDL3 from source and link it statically.
+    const sdl = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.linkLibrary(sdl.artifact("SDL3"));
+}
+```
