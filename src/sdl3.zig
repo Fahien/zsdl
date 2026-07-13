@@ -660,6 +660,11 @@ pub fn getWindowSize(window: *Window, w: ?*c_int, h: ?*c_int) Error!void {
 }
 extern fn SDL_GetWindowSize(window: *Window, w: ?*c_int, h: ?*c_int) bool;
 
+pub fn getWindowSizeInPixels(window: *Window, w: ?*c_int, h: ?*c_int) Error!void {
+    if (!SDL_GetWindowSizeInPixels(window, w, h)) return makeError();
+}
+extern fn SDL_GetWindowSizeInPixels(window: *Window, w: ?*c_int, h: ?*c_int) bool;
+
 pub fn getWindowDisplayScale(window: *Window) Error!f32 {
     const scale = SDL_GetWindowDisplayScale(window);
     if (scale == 0.0) {
